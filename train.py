@@ -12,14 +12,18 @@ import os
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
-def main():
+def main(cfg_like=None):
     # Configuration
-    config = Config.from_defaults(data_dir="data_preparation/clip_dataset")
+    # config = Config.from_defaults(data_dir="data_preparation/clip_dataset")
+    # config.finalize()
+    config = Config.build(cfg_like, default_data_dir="data_preparation/clip_dataset")
 
-    # Device
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    config.training.device = device
-    print(f"Device: {device}")
+    # 2) device 설정
+    config.training.device = "cuda" if torch.cuda.is_available() else "cpu"
+    print("Device:", config.training.device)
+
+    # 3) ✅ 여기서만 finalize (run_dir 생성 + dump)
+    config.finalize()
 
     text_backend = getattr(config.model, "text_backend", "custom")
 
@@ -47,6 +51,15 @@ def main():
     )
     graph_dim = dataset.graph_dim
     print(f"Graph embedding dimension: {graph_dim}")
+
+    graph_dim = dataset.graph_dim
+
+    (meta_path := config.paths.run_dir / "meta.txt").write_text(
+        f"graph_dim: {graph_dim}\n"
+        f"jsonl_path: {config.paths.jsonl_path}\n"
+        f"graph_emb_dir: {config.paths.graph_emb_dir}\n",
+        encoding="utf-8"
+    )
 
     # DataLoader
     train_loader = create_dataloader(

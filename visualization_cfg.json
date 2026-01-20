@@ -1,0 +1,24 @@
+{
+  "data_dir": "data_preparation/clip_dataset",
+
+  "model": {
+    "text_backend": "t5",
+    "t5_model_name": "t5-base",
+    "graph_backbone": "equiformer",
+    "clip_dim": 512,
+    "freeze_t5": true,
+    "train_layernorm_only": true
+  },
+
+  "training": {
+    "batch_size": 64,
+    "epochs": 2
+  },
+
+  "visualization": {
+    "n_samples_tsne": 800,
+    "tsne_perplexity": 30,
+    "tsne_seed": 42,
+    "similarity_batch_size": 64
+  }
+}

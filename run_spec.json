@@ -1,0 +1,11 @@
+{
+  "data_dir": "data_preparation/clip_dataset",
+  "model": {
+    "text_backend": "t5",
+    "t5_model_name": "t5-base",
+    "text_model_id": "t5-base",
+    "graph_backbone_id": "equiformer",
+    "freeze_t5": true,
+    "train_layernorm_only": true
+  }
+}

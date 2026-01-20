@@ -21,6 +21,9 @@ import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
+import scienceplots
+
+plt.style.use(["science", "no-latex"])
 
 
 # =========================
@@ -373,7 +376,7 @@ def plot_tsne_pairs(G, T, out_path, title, seed=42, perplexity=30):
     Xg = X2[:N]
     Xt = X2[N:]
 
-    plt.figure(figsize=(10, 8))
+    plt.figure(figsize=(8, 6))
     plt.scatter(Xg[:, 0], Xg[:, 1], s=18, alpha=0.65, marker="o", label="graph")
     plt.scatter(Xt[:, 0], Xt[:, 1], s=60, alpha=0.65, marker="*", label="text")
 
@@ -381,25 +384,23 @@ def plot_tsne_pairs(G, T, out_path, title, seed=42, perplexity=30):
     for i in range(min(N, 200)):
         plt.plot([Xg[i, 0], Xt[i, 0]], [Xg[i, 1], Xt[i, 1]], linewidth=0.5, alpha=0.15)
 
-    plt.title(title)
-    plt.xlabel("t-SNE dim 1")
-    plt.ylabel("t-SNE dim 2")
+    plt.xlabel("t-SNE dim 1", size=12)
+    plt.ylabel("t-SNE dim 2", size=12)
     plt.legend()
     plt.tight_layout()
-    plt.savefig(out_path, dpi=300, bbox_inches="tight")
+    plt.savefig(out_path, dpi=400, bbox_inches="tight")
     plt.close()
 
 
 def plot_similarity_heatmap(G, T, out_path, title):
     S = G @ T.T
-    plt.figure(figsize=(8, 6))
+    plt.figure(figsize=(6, 5))
     im = plt.imshow(S, aspect="auto")
     plt.colorbar(im)
-    plt.title(title)
-    plt.xlabel("text index")
-    plt.ylabel("graph index")
+    plt.xlabel("text index", size=12)
+    plt.ylabel("graph index", size=12)
     plt.tight_layout()
-    plt.savefig(out_path, dpi=300, bbox_inches="tight")
+    plt.savefig(out_path, dpi=400, bbox_inches="tight")
     plt.close()
 
 

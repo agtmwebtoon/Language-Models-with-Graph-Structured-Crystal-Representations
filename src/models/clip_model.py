@@ -4,9 +4,9 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Tuple
+from typing import Tuple, Literal
 
-from .encoders import GraphEncoder, TextEncoder
+from .encoders import GraphEncoder, TextEncoder, T5Encoder
 
 
 class GraphTextCLIP(nn.Module):
@@ -16,24 +16,44 @@ class GraphTextCLIP(nn.Module):
         self,
         graph_in_dim: int,
         clip_dim: int,
-        text_width: int,
-        max_len: int,
-        text_layers: int,
-        text_heads: int,
+        text_backend: Literal["t5", "custom"] = "custom",
+        text_width: int = 512,
+        max_len: int = 256,
+        text_layers: int = 6,
+        text_heads: int = 8,
         vocab_size: int = 256,
         dropout: float = 0.0,
+        t5_model_name: str = "t5-base",
+        t5_pooling: Literal["mean", "first", "last"] = "mean",
+        freeze_t5: bool = False,
+        train_layernorm_only: bool = False,
+        t5_dropout: float = 0.0
     ):
         super().__init__()
         self.graph_encoder = GraphEncoder(graph_in_dim, clip_dim)
-        self.text_encoder = TextEncoder(
-            vocab_size=vocab_size,
-            width=text_width,
-            max_len=max_len,
-            n_layers=text_layers,
-            n_heads=text_heads,
-            emb_dim=clip_dim,
-            dropout=dropout,
-        )
+
+        if text_backend == "custom":
+            self.text_encoder = TextEncoder(
+                vocab_size=vocab_size,
+                width=text_width,
+                max_len=max_len,
+                n_layers=text_layers,
+                n_heads=text_heads,
+                emb_dim=clip_dim,
+                dropout=dropout,
+            )
+        elif text_backend == "t5":
+            self.text_encoder = T5Encoder(
+                model_name=t5_model_name,
+                embed_dim=clip_dim,
+                pooling=t5_pooling,
+                freeze_t5=freeze_t5,
+                train_layernorm_only=train_layernorm_only,
+                dropout=t5_dropout
+            )
+        else:
+            raise ValueError(f"Unsupported text backend: {text_backend}.")
+
         self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
 
     def forward(

@@ -125,19 +125,24 @@ class GraphTextCollator:
         graphs = torch.tensor(
             np.stack([b["graph"] for b in batch]), dtype=torch.float32
         )
+        texts = [b["text"] for b in batch]
 
-        # Tokenize texts
-        input_ids_list = []
-        attention_mask_list = []
-        for b in batch:
-            ids, attn = self.tokenizer.encode(b["text"], self.max_len)
-            input_ids_list.append(ids)
-            attention_mask_list.append(attn)
+        if hasattr(self.tokenizer, "encode_batch"):
+            input_ids, attention_mask = self.tokenizer.encode_batch(texts)
+
+        else:
+            ids_list, attn_list = [], []
+            for t in texts:
+                ids, attn = self.tokenizer.encode(t, self.max_len)
+                ids_list.append(ids)
+                attn_list.append(attn)
+            input_ids = torch.stack(ids_list, 0)
+            attention_mask = torch.stack(attn_list, 0)
 
         return {
             "graph": graphs,
-            "input_ids": torch.stack(input_ids_list, 0),
-            "attention_mask": torch.stack(attention_mask_list, 0),
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
             "id": [b["id"] for b in batch],
             "formula": [b["formula"] for b in batch],
         }

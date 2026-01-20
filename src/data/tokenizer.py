@@ -1,7 +1,9 @@
 """Byte-level tokenizer for text encoding."""
 
 import torch
-from typing import Tuple
+from typing import Tuple, List
+
+from transformers import T5Tokenizer
 
 
 class ByteLevelTokenizer:
@@ -56,3 +58,50 @@ class ByteLevelTokenizer:
             return bytes(byte_ids).decode("utf-8", errors="ignore")
         except:
             return ""
+
+class HFTokenizerWrapper:
+    """
+    HuggingFace tokenizer wrapper (e.g., T5Tokenizer).
+    Interface-compatible with ByteLevelTokenizer for collators.
+    """
+
+    def __init__(
+        self,
+        model_name: str = "t5-base",
+        max_len: int = 256,
+        padding: str = "max_length",  # or "longest"
+    ):
+        self.tokenizer = T5Tokenizer.from_pretrained(model_name)
+        self.max_len = max_len
+        self.padding = padding
+
+    def encode_batch(self, texts: List[str]) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Args:
+            texts: list[str]
+
+        Returns:
+            input_ids: [B, L]
+            attention_mask: [B, L]
+        """
+        enc = self.tokenizer(
+            texts,
+            padding=self.padding,
+            truncation=True,
+            max_length=self.max_len,
+            return_tensors="pt",
+        )
+        return enc["input_ids"].long(), enc["attention_mask"].long()
+
+    def encode(self, text: str) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        (Optional) single-text encode, for API compatibility
+        """
+        enc = self.tokenizer(
+            text,
+            padding=self.padding,
+            truncation=True,
+            max_length=self.max_len,
+            return_tensors="pt",
+        )
+        return enc["input_ids"][0].long(), enc["attention_mask"][0].long()

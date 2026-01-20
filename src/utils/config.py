@@ -29,12 +29,21 @@ class PathConfig:
 class ModelConfig:
     """Model architecture configuration."""
     clip_dim: int = 512
+    text_backend: Literal["t5", "custom"] = "t5"
     text_width: int = 512
     text_layers: int = 6
     text_heads: int = 8
     max_seq_length: int = 256
     vocab_size: int = 256
     dropout: float = 0.0
+
+    t5_model_name: str = "t5-base"
+    t5_pooling: Literal["mean", "first", "last"] = "mean"
+    t5_padding: Literal["max_length", "longest"] = "max_length"
+    t5_dropout: float = 0.0
+    freeze_t5: bool = False
+    train_layernorm_only: bool = False
+
 
     def __post_init__(self):
         assert self.text_width % self.text_heads == 0, "text_width must be divisible by text_heads"

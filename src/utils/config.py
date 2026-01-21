@@ -193,16 +193,6 @@ class Config:
                 for k, v in section_dict.items():
                     _safe_set(obj, k, v)
 
-        viz = payload.get("visualization", {})
-        tsne = viz.get("tsne")
-        if tsne is not None and hasattr(self.visualization, "tsne"):
-            for k, v in dict(tsne).items():
-                _safe_set(self.visualization.tsne, k, v)
-
-        # model id 자동 채움
-        if hasattr(self.model, "__post_init__"):
-            self.model.__post_init__()
-
         if "data_dir" in payload and payload["data_dir"] is not None:
             self.paths.data_dir = Path(payload["data_dir"])
 
@@ -217,17 +207,24 @@ class Config:
 
         cfg.apply_overrides(payload)
 
+        # (dataclass라면 new instance를 만들 필요는 없지만, id 자동생성이 누락될 수 있어 방어적으로 처리)
+        if getattr(cfg.model, "text_model_id", None) is None or getattr(cfg.model, "graph_backbone_id", None) is None:
+            cfg.model.__post_init__()
 
         return cfg
 
     @classmethod
     def from_json(cls, path: Union[str, Path], default_data_dir: str = "data_preparation/clip_dataset") -> "Config":
         payload = json.loads(Path(path).read_text(encoding="utf-8"))
-        data_dir = payload.get("data_dir", default_data_dir)
+        return cls.from_dict(payload, default_data_dir=default_data_dir)
 
-        cfg = cls.from_defaults(data_dir=str(data_dir))
-        cfg.apply_overrides(payload)
-        return cfg
+    @classmethod
+    def from_defaults(cls, data_dir: str = "data_preparation/clip_dataset"):
+        """Create config with default values."""
+        return cls(
+            data_dir=data_dir,
+            run_name=None
+        )
 
     @classmethod
     def build(cls, cfg_like: CfgLike = None, default_data_dir: str = "data_preparation/clip_dataset") -> "Config":
@@ -244,20 +241,7 @@ class Config:
             return cfg_like
         if isinstance(cfg_like, (str, Path)):
             return cls.from_json(cfg_like, default_data_dir=default_data_dir)
-
-        payload = dict(cfg_like)
-        data_dir = payload.get("data_dir", default_data_dir)
-        cfg = cls.from_defaults(data_dir=str(data_dir))
-        cfg.apply_overrides(payload)
-        return cfg
-
-    @classmethod
-    def from_defaults(cls, data_dir: str = "data_preparation/clip_dataset"):
-        """Create config with default values."""
-        return cls(
-            data_dir=data_dir,
-            run_name=None
-        )
+        return cls.from_dict(cfg_like, default_data_dir=default_data_dir)
 
     def finalize(self):
         """

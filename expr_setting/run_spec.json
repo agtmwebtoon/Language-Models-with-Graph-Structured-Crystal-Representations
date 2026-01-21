@@ -1,11 +1,22 @@
 {
   "data_dir": "data_preparation/clip_dataset",
+
   "model": {
-    "text_backend": "t5",
-    "t5_model_name": "t5-base",
-    "text_model_id": "t5-base",
-    "graph_backbone_id": "equiformer",
+    "text_backend": "custom",
+    "t5_model_name": "customTx",
     "freeze_t5": true,
-    "train_layernorm_only": true
+    "train_layernorm_only": true,
+    "clip_dim": 512,
+    "max_seq_length": 256
+  },
+
+  "training": {
+    "batch_size": 128,
+    "learning_rate": 0.0002,
+    "weight_decay": 0.01,
+    "epochs": 20,
+    "num_workers": 8,
+    "log_interval": 20,
+    "device": "cuda"
   }
 }

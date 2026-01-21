@@ -36,7 +36,6 @@ def build_viz_run_config_from_cfg(cfg: Config) -> VizRunConfig:
     perplexity = float(getattr(v, "tsne_perplexity", 30))
     seed = int(getattr(v, "tsne_seed", 42))
 
-    # 아래는 네 config.py에는 없으니 고정 디폴트로 둠(원하면 VisualizationConfig에 추가 가능)
     loader_batch_size = int(getattr(v, "loader_batch_size", 128))
     connect_k = int(getattr(v, "connect_k", 200))
     seed_subset = int(getattr(v, "seed_subset", 123))
@@ -57,7 +56,6 @@ def main():
     ap.add_argument("--cfg", type=str, required=True, help="Path to cfg json")
     args = ap.parse_args()
 
-    # ✅ 네 config.py의 build/apply_overrides 로직 그대로 사용
     cfg = Config.build(args.cfg)
 
     run_cfg = build_viz_run_config_from_cfg(cfg)

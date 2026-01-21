@@ -95,8 +95,8 @@ class T5Encoder(nn.Module):
                  train_layernorm_only: bool = False
                  ):
         super().__init__()
-        self.model = T5EncoderModel.from_pretrained(model_name)
-        self.t5 = T5EncoderModel.from_pretrained(model_name)
+        #self.model = T5EncoderModel.from_pretrained(model_name, local_files_only=True)
+        self.t5 = T5EncoderModel.from_pretrained(model_name, local_files_only=True)
         self.hidden = self.t5.config.d_model
         self.pooling = pooling
 

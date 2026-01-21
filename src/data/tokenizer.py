@@ -71,7 +71,7 @@ class HFTokenizerWrapper:
         max_len: int = 256,
         padding: str = "max_length",  # or "longest"
     ):
-        self.tokenizer = T5Tokenizer.from_pretrained(model_name)
+        self.tokenizer = T5Tokenizer.from_pretrained(model_name, local_files_only=True)
         self.max_len = max_len
         self.padding = padding
 

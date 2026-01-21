@@ -1,4 +1,5 @@
 """Train Graph-Text CLIP model with refactored OOP structure."""
+import argparse
 
 import torch
 from pathlib import Path
@@ -10,7 +11,17 @@ from src.models.clip_model import GraphTextCLIP
 from src.training.trainer import Trainer
 import os
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+
+def parse_args():
+    p = argparse.ArgumentParser()
+    p.add_argument(
+        "--cfg",
+        type=str,
+        default=None,
+        help="Config source passed to Config.build(). e.g. 'aaa.json' or json string.",
+    )
+    return p.parse_args()
 
 def main(cfg_like=None):
     # Configuration
@@ -18,11 +29,9 @@ def main(cfg_like=None):
     # config.finalize()
     config = Config.build(cfg_like, default_data_dir="data_preparation/clip_dataset")
 
-    # 2) device 설정
     config.training.device = "cuda" if torch.cuda.is_available() else "cpu"
     print("Device:", config.training.device)
 
-    # 3) ✅ 여기서만 finalize (run_dir 생성 + dump)
     config.finalize()
 
     text_backend = getattr(config.model, "text_backend", "custom")
@@ -106,4 +115,5 @@ def main(cfg_like=None):
 
 
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+    main(cfg_like=args.cfg)

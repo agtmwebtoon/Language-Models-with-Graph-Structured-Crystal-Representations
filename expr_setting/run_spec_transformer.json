@@ -1,0 +1,20 @@
+{
+  "data_dir": "data_preparation/clip_dataset",
+  "model": {
+    "clip_dim": 512,
+    "text_backend": "custom",
+    "text_model_name": null,
+    "text_model_id": "customTx",
+    "graph_backbone": "equiformer",
+    "graph_backbone_name": null,
+    "graph_backbone_id": "equiformer",
+    "graph_projector": "linear",
+    "graph_projector_id": "linear",
+    "text_width": 512,
+    "text_layers": 6,
+    "text_heads": 8,
+    "max_seq_length": 256,
+    "vocab_size": 256,
+    "dropout": 0.0
+  }
+}

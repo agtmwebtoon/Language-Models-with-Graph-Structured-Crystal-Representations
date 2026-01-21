@@ -133,7 +133,7 @@ python build_graph_text_dataset.py \
 
 **Using default configuration:**
 ```bash
-python train.py --cfg expr_setting/run_spec.json
+python train.py --cfg expr_setting/run_spec_t5.json
 ```
 
 

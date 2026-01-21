@@ -1,22 +1,32 @@
 {
-  "data_dir": "data_preparation/clip_dataset",
-
   "model": {
-    "text_backend": "custom",
-    "t5_model_name": "customTx",
-    "freeze_t5": true,
-    "train_layernorm_only": true,
-    "clip_dim": 512,
-    "max_seq_length": 256
+    "text_backend": "huggingface",
+    "text_model_name": "t5-base",
+    "text_pooling": "first",
+    "freeze_text_backbone": true
   },
-
   "training": {
-    "batch_size": 128,
-    "learning_rate": 0.0002,
+    "epochs": 100,
+    "batch_size": 32,
+    "learning_rate": 0.0001,
     "weight_decay": 0.01,
-    "epochs": 20,
-    "num_workers": 8,
-    "log_interval": 20,
-    "device": "cuda"
+    "num_workers": 4,
+    "device": "cuda",
+    "log_interval": 50,
+
+    "use_validation": true,
+    "val_split": 0.1,
+    "val_seed": 42,
+
+    "early_stopping": true,
+    "early_stopping_patience": 10,
+    "early_stopping_metric": "val_loss",
+
+    "visualize_during_training": true,
+    "visualize_interval": 2,
+    "visualize_n_samples": 800,
+
+    "use_wandb": true,
+    "wandb_project": "graph-text-clip"
   }
 }

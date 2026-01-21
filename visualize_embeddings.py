@@ -11,11 +11,13 @@
 import argparse
 import os
 
+# Set environment variables before importing transformers
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
 from src.utils.config import Config
 from src.visualization import GraphTextCLIPVisualizer, VizRunConfig
 from src.visualization.plots import TSNEConfig
-
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 
 def build_viz_run_config_from_cfg(cfg: Config) -> VizRunConfig:

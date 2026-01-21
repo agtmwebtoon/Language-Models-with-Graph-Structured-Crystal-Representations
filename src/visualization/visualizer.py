@@ -44,8 +44,6 @@ class GraphTextCLIPVisualizer:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.config.training.device = str(self.device)
 
-        self.text_backend = getattr(self.config.model, "text_backend", "custom")
-
     def _use_latest_run_paths(self):
         runs_dir = Path(self.config.paths.data_dir) / "runs"
         base_name = build_run_name(self.config)
@@ -72,11 +70,11 @@ class GraphTextCLIPVisualizer:
         print(f"[viz] Using latest run: {latest.name}")
 
     def _build_tokenizer(self):
-        if self.text_backend == "t5":
+        if self.config.model.text_backend == "huggingface":
             return HFTokenizerWrapper(
-                model_name=getattr(self.config.model, "t5_model_name", "t5-base"),
+                model_name=self.config.model.text_model_name,
                 max_len=self.config.model.max_seq_length,
-                padding=getattr(self.config.model, "t5_padding", "max_length"),
+                padding=self.config.tokenizer.tokenizer_padding,
             )
         return ByteLevelTokenizer(
             pad_token=self.config.tokenizer.pad_token,
@@ -110,14 +108,16 @@ class GraphTextCLIPVisualizer:
         return dataset, loader
 
     def _build_model(self, graph_dim: int) -> GraphTextCLIP:
-        if self.text_backend == "t5":
+        if self.config.model.text_backend == "huggingface":
             model = GraphTextCLIP(
                 graph_in_dim=graph_dim,
                 clip_dim=self.config.model.clip_dim,
-                text_backend="t5",
-                t5_model_name=getattr(self.config.model, "t5_model_name", "t5-base"),
-                t5_pooling=getattr(self.config.model, "t5_pooling", "mean"),
-                freeze_t5=True,  # viz only
+                text_backend="huggingface",
+                text_model_name=self.config.model.text_model_name,
+                text_pooling=self.config.model.text_pooling,
+                freeze_text_backbone=True,  # inference only
+                train_text_layernorm_only=False,
+                text_dropout=0.0,
             )
         else:
             model = GraphTextCLIP(

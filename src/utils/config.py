@@ -10,11 +10,6 @@ from .config_dump import dump_config_txt, dump_config_json
 
 CfgLike = Union["Config", Mapping[str, Any], str, None]
 
-def _safe_set(obj, k: str, v: Any):
-    """Set attribute only if it exists."""
-    if hasattr(obj, k):
-        setattr(obj, k, v)
-
 
 @dataclass
 class PathConfig:
@@ -45,12 +40,27 @@ class ModelConfig:
     """Model architecture configuration."""
     clip_dim: int = 512
 
-    # ----- TEXT -----
-    text_backend: Literal["custom", "t5", "bert", "llama", "other"] = "t5"
-    text_model_name: Optional[str] = None  # ex) "t5-base", "bert-base-uncased"
-    text_model_id: Optional[str] = None  # 짧은 run naming용 (없으면 자동 생성)
+    # ----- TEXT ENCODER -----
+    text_backend: Literal["custom", "huggingface"] = "huggingface"
 
-    # ----- GRAPH (graph embedding model+ projector) -----
+    # For huggingface backend (T5, BERT, RoBERTa, etc.)
+    text_model_name: str = "t5-base"  # HuggingFace model name
+    text_pooling: Literal["mean", "first", "last"] = "mean"
+    text_dropout: float = 0.0
+    freeze_text_backbone: bool = True
+    train_text_layernorm_only: bool = True
+
+    # For custom transformer backend
+    text_width: int = 512
+    text_layers: int = 6
+    text_heads: int = 8
+    vocab_size: int = 256
+
+    # Shared parameters
+    max_seq_length: int = 256
+    dropout: float = 0.0
+
+    # ----- GRAPH (graph embedding model + projector) -----
     # graph_backbone: graph embedding을 생성한 모델/파이프라인 이름
     graph_backbone: Literal["equiformer", "chgnet", "cgcnn", "mpnn", "other"] = "equiformer"
     graph_backbone_name: Optional[str] = None  # ex) "equiformer_v2_oc20_83M_2M"
@@ -60,37 +70,19 @@ class ModelConfig:
     graph_projector: Literal["linear", "mlp"] = "linear"
     graph_projector_id: Optional[str] = None  # 보통 linear/mlp
 
-    text_width: int = 512
-    text_layers: int = 6
-    text_heads: int = 8
-    max_seq_length: int = 256
-    vocab_size: int = 256
-    dropout: float = 0.0
-
-
-
-    t5_model_name: str = "t5-base"
-    t5_pooling: Literal["mean", "first", "last"] = "mean"
-    t5_padding: Literal["max_length", "longest"] = "max_length"
-    t5_dropout: float = 0.0
-    freeze_t5: bool = True
-    train_layernorm_only: bool = True
-
+    # ----- IDs for run naming -----
+    text_model_id: Optional[str] = None  # 짧은 run naming용 (없으면 자동 생성)
 
     def __post_init__(self):
         # ---- text_model_id 자동 생성 ----
         if self.text_model_id is None:
-            if self.text_backend == "t5":
-                self.text_model_id = self.t5_model_name.replace("/", "-")
-                self.text_model_name = self.t5_model_name
-            elif self.text_model_name:
+            if self.text_backend == "huggingface":
                 self.text_model_id = self.text_model_name.replace("/", "-")
             else:
                 self.text_model_id = "customTx"
 
         # ---- graph_backbone_id 자동 생성 ----
         if self.graph_backbone_id is None:
-            # equiformer_v2_oc20_83M 처럼 짧게
             base = self.graph_backbone_name or self.graph_backbone
             self.graph_backbone_id = str(base).replace("/", "-")
 
@@ -100,7 +92,8 @@ class ModelConfig:
 
         # custom text일 때만 체크
         if self.text_backend == "custom":
-            assert self.text_width % self.text_heads == 0
+            assert self.text_width % self.text_heads == 0, \
+                f"text_width ({self.text_width}) must be divisible by text_heads ({self.text_heads})"
 
 
 @dataclass
@@ -114,14 +107,41 @@ class TrainingConfig:
     device: str = "cuda"
     log_interval: int = 50
 
+    # Train/Val split
+    use_validation: bool = True
+    val_split: float = 0.1  # 10% for validation
+    val_seed: int = 42
+
+    # Early stopping
+    early_stopping: bool = False
+    early_stopping_patience: int = 5
+    early_stopping_metric: Literal["val_loss", "val_acc_g2t", "val_acc_t2g"] = "val_loss"
+    early_stopping_mode: Literal["min", "max"] = "min"  # min for loss, max for accuracy
+
+    # WandB logging
+    use_wandb: bool = False
+    wandb_project: Optional[str] = None
+    wandb_entity: Optional[str] = None
+    wandb_run_name: Optional[str] = None
+    wandb_tags: Optional[list] = None
+
+    # Visualization during training
+    visualize_during_training: bool = False
+    visualize_interval: int = 10  # visualize every N epochs
+    visualize_n_samples: int = 800  # number of samples to visualize
+
 
 @dataclass
 class TokenizerConfig:
     """Tokenizer configuration."""
+    # For byte-level tokenizer
     pad_token: int = 0
     sot_token: int = 2
     eot_token: int = 3
     vocab_size: int = 256
+
+    # For HuggingFace tokenizers
+    tokenizer_padding: Literal["max_length", "longest"] = "max_length"
 
 
 @dataclass
@@ -182,17 +202,35 @@ class Config:
     def apply_overrides(self, payload: Mapping[str, Any]) -> "Config":
         """
         Apply cfg overrides to this Config in-place.
-        Unknown keys are ignored (safe).
+        Only updates existing dataclass fields.
         """
         payload = dict(payload)
 
-        for sec in ["model", "training", "tokenizer", "visualization"]:
-            if sec in payload and payload[sec] is not None:
-                section_dict = dict(payload[sec])
-                obj = getattr(self, sec)
-                for k, v in section_dict.items():
-                    _safe_set(obj, k, v)
+        # Update model config
+        if "model" in payload and payload["model"] is not None:
+            for k, v in payload["model"].items():
+                if hasattr(self.model, k):
+                    setattr(self.model, k, v)
 
+        # Update training config
+        if "training" in payload and payload["training"] is not None:
+            for k, v in payload["training"].items():
+                if hasattr(self.training, k):
+                    setattr(self.training, k, v)
+
+        # Update tokenizer config
+        if "tokenizer" in payload and payload["tokenizer"] is not None:
+            for k, v in payload["tokenizer"].items():
+                if hasattr(self.tokenizer, k):
+                    setattr(self.tokenizer, k, v)
+
+        # Update visualization config
+        if "visualization" in payload and payload["visualization"] is not None:
+            for k, v in payload["visualization"].items():
+                if hasattr(self.visualization, k):
+                    setattr(self.visualization, k, v)
+
+        # Update data_dir
         if "data_dir" in payload and payload["data_dir"] is not None:
             self.paths.data_dir = Path(payload["data_dir"])
 
@@ -207,9 +245,8 @@ class Config:
 
         cfg.apply_overrides(payload)
 
-        # (dataclass라면 new instance를 만들 필요는 없지만, id 자동생성이 누락될 수 있어 방어적으로 처리)
-        if getattr(cfg.model, "text_model_id", None) is None or getattr(cfg.model, "graph_backbone_id", None) is None:
-            cfg.model.__post_init__()
+        # Re-run post_init to ensure derived fields are populated
+        cfg.model.__post_init__()
 
         return cfg
 

@@ -3,7 +3,7 @@
 import torch
 from typing import Tuple, List
 
-from transformers import T5Tokenizer
+from transformers import AutoTokenizer
 
 
 class ByteLevelTokenizer:
@@ -61,7 +61,7 @@ class ByteLevelTokenizer:
 
 class HFTokenizerWrapper:
     """
-    HuggingFace tokenizer wrapper (e.g., T5Tokenizer).
+    HuggingFace tokenizer wrapper supporting any AutoTokenizer model.
     Interface-compatible with ByteLevelTokenizer for collators.
     """
 
@@ -71,9 +71,10 @@ class HFTokenizerWrapper:
         max_len: int = 256,
         padding: str = "max_length",  # or "longest"
     ):
-        self.tokenizer = T5Tokenizer.from_pretrained(model_name, local_files_only=True)
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name, local_files_only=True)
         self.max_len = max_len
         self.padding = padding
+        self.model_name = model_name
 
     def encode_batch(self, texts: List[str]) -> Tuple[torch.Tensor, torch.Tensor]:
         """

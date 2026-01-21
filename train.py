@@ -1,17 +1,50 @@
 """Train Graph-Text CLIP model with refactored OOP structure."""
 import argparse
+import random
+import os
+
+# Set environment variables before importing torch/transformers
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["TOKENIZERS_PARALLELISM"] = "false"  # Disable tokenizer parallelism to avoid fork warnings
 
 import torch
 from pathlib import Path
+from torch.utils.data import Subset
 
 from src.utils.config import Config
 from src.data.tokenizer import ByteLevelTokenizer, HFTokenizerWrapper
 from src.data.dataset import GraphTextDataset, create_dataloader
 from src.models.clip_model import GraphTextCLIP
 from src.training.trainer import Trainer
-import os
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+
+def split_dataset(dataset, val_split: float, seed: int = 42):
+    """
+    Split dataset into train and validation sets.
+
+    Args:
+        dataset: Full dataset
+        val_split: Fraction of data for validation (0.0 - 1.0)
+        seed: Random seed for reproducibility
+
+    Returns:
+        train_dataset, val_dataset (Subset objects)
+    """
+    total_size = len(dataset)
+    val_size = int(total_size * val_split)
+    train_size = total_size - val_size
+
+    # Create shuffled indices
+    indices = list(range(total_size))
+    random.Random(seed).shuffle(indices)
+
+    train_indices = indices[:train_size]
+    val_indices = indices[train_size:]
+
+    train_dataset = Subset(dataset, train_indices)
+    val_dataset = Subset(dataset, val_indices)
+
+    return train_dataset, val_dataset
 
 def parse_args():
     p = argparse.ArgumentParser()
@@ -34,18 +67,15 @@ def main(cfg_like=None):
 
     config.finalize()
 
-    text_backend = getattr(config.model, "text_backend", "custom")
-
-    if text_backend == "t5":
+    # Tokenizer
+    if config.model.text_backend == "huggingface":
         tokenizer = HFTokenizerWrapper(
-            model_name=config.model.t5_model_name,
+            model_name=config.model.text_model_name,
             max_len=config.model.max_seq_length,
-            padding=getattr(config.model, "t5_padding", "max_length"),
+            padding=config.tokenizer.tokenizer_padding,
         )
-        print(f"Tokenizer: HF ({tokenizer.tokenizer.name_or_path})")
-
+        print(f"Tokenizer: HuggingFace ({config.model.text_model_name})")
     else:
-        # Tokenizer
         tokenizer = ByteLevelTokenizer(
             pad_token=config.tokenizer.pad_token,
             sot_token=config.tokenizer.sot_token,
@@ -61,18 +91,34 @@ def main(cfg_like=None):
     graph_dim = dataset.graph_dim
     print(f"Graph embedding dimension: {graph_dim}")
 
-    graph_dim = dataset.graph_dim
+    # Train/Val split
+    train_dataset = dataset
+    val_dataset = None
+    val_loader = None
+
+    if config.training.use_validation:
+        train_dataset, val_dataset = split_dataset(
+            dataset,
+            val_split=config.training.val_split,
+            seed=config.training.val_seed,
+        )
+        print(f"Dataset split: {len(train_dataset)} train, {len(val_dataset)} validation")
+    else:
+        print(f"Using full dataset for training: {len(dataset)} samples")
 
     (meta_path := config.paths.run_dir / "meta.txt").write_text(
         f"graph_dim: {graph_dim}\n"
+        f"total_samples: {len(dataset)}\n"
+        f"train_samples: {len(train_dataset)}\n"
+        f"val_samples: {len(val_dataset) if val_dataset else 0}\n"
         f"jsonl_path: {config.paths.jsonl_path}\n"
         f"graph_emb_dir: {config.paths.graph_emb_dir}\n",
         encoding="utf-8"
     )
 
-    # DataLoader
+    # DataLoaders
     train_loader = create_dataloader(
-        dataset=dataset,
+        dataset=train_dataset,
         tokenizer=tokenizer,
         max_len=config.model.max_seq_length,
         batch_size=config.training.batch_size,
@@ -81,18 +127,29 @@ def main(cfg_like=None):
         drop_last=True,
     )
 
-    if text_backend == "t5":
+    if val_dataset is not None:
+        val_loader = create_dataloader(
+            dataset=val_dataset,
+            tokenizer=tokenizer,
+            max_len=config.model.max_seq_length,
+            batch_size=config.training.batch_size,
+            shuffle=False,
+            num_workers=config.training.num_workers,
+            drop_last=False,
+        )
+
+    # Model
+    if config.model.text_backend == "huggingface":
         model = GraphTextCLIP(
             graph_in_dim=graph_dim,
             clip_dim=config.model.clip_dim,
-            text_backend="t5",
-            t5_model_name=getattr(config.model, "t5_model_name", "t5-base"),
-            t5_pooling=getattr(config.model, "t5_pooling", "mean"),
-            freeze_t5=getattr(config.model, "freeze_t5", False),
-            train_layernorm_only=getattr(config.model, "train_layernorm_only", False),
-            t5_dropout=getattr(config.model, "t5_dropout", 0.0)
+            text_backend="huggingface",
+            text_model_name=config.model.text_model_name,
+            text_pooling=config.model.text_pooling,
+            freeze_text_backbone=config.model.freeze_text_backbone,
+            train_text_layernorm_only=config.model.train_text_layernorm_only,
+            text_dropout=config.model.text_dropout,
         )
-
     else:
         model = GraphTextCLIP(
             graph_in_dim=graph_dim,
@@ -103,12 +160,18 @@ def main(cfg_like=None):
             text_layers=config.model.text_layers,
             text_heads=config.model.text_heads,
             vocab_size=config.model.vocab_size,
-            dropout=config.model.dropout
+            dropout=config.model.dropout,
         )
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
 
     # Trainer
-    trainer = Trainer(model=model, config=config, train_loader=train_loader)
+    trainer = Trainer(
+        model=model,
+        config=config,
+        train_loader=train_loader,
+        val_loader=val_loader,
+        full_dataset=dataset,  # For visualization during training
+    )
 
     # Train
     trainer.train()

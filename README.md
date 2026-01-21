@@ -12,26 +12,37 @@ This project uses contrastive learning to create a unified representation space 
 ### Key Features
 
 - **Dual Encoder Architecture**: Separate encoders for graph and text modalities
-- **Multiple Text Backends**: Support for custom Transformer encoder or pre-trained T5 models
+- **Multiple Text Backends**: Support for custom Transformer encoder or HuggingFace models (T5, BERT, RoBERTa, etc.)
 - **Pre-computed Graph Embeddings**: Uses Equiformer V2 for extracting structural features
 - **Flexible Configuration**: Easy-to-modify configuration system with dataclasses
 - **Modular Design**: Clean separation of concerns (models, data, training, visualization)
 - **Type-Safe**: Full type annotations throughout the codebase
+- **Training Features**:
+  - Automatic train/validation split
+  - Early stopping with configurable patience
+  - WandB integration for experiment tracking
+  - Periodic visualization during training
+  - Best model checkpointing
 
 ## Project Structure
+
+![Model Architecture Overview](misc/Model%20overview.svg)
+
+<details>
+<summary>📁 Directory Structure (click to expand)</summary>
 
 ```
 material_representation_graph_text/
 ├── src/
 │   ├── models/              # Model architectures
 │   │   ├── components.py      # Attention, transformer building blocks
-│   │   ├── encoders.py        # GraphEncoder, TextEncoder, T5Encoder
+│   │   ├── encoders.py        # GraphEncoder, CustomTextEncoder, HuggingFaceTextEncoder
 │   │   └── clip_model.py      # GraphTextCLIP main model
 │   ├── data/                # Data handling
 │   │   ├── tokenizer.py       # ByteLevelTokenizer, HFTokenizerWrapper
 │   │   └── dataset.py         # GraphTextDataset, dataloaders
 │   ├── training/            # Training framework
-│   │   └── trainer.py         # Trainer class with logging & checkpointing
+│   │   └── trainer.py         # Trainer with early stopping, WandB, visualization
 │   ├── utils/               # Utilities
 │   │   ├── config.py          # Configuration management
 │   │   ├── run_naming.py      # Experiment naming utilities
@@ -46,11 +57,15 @@ material_representation_graph_text/
 ├── expr_setting/            # Experiment configurations
 │   ├── run_spec.json          # Training configuration specs
 │   └── visualization_cfg.json # Visualization settings
+├── misc/                    # Documentation assets
+│   └── Model overview.svg     # Architecture diagram
 ├── train.py                 # Main training script
 ├── visualize_embeddings.py  # Embedding visualization script
 ├── environment.yml          # Conda environment specification
 └── README.md               # This file
 ```
+
+</details>
 
 ## Architecture
 
@@ -61,15 +76,19 @@ material_representation_graph_text/
 
 ### Text Encoder (Two Options)
 
-**Option 1: Custom Transformer**
+**Option 1: Custom Transformer (`CustomTextEncoder`)**
 - Byte-level tokenization (256 vocab size)
 - Learnable positional embeddings
 - Multi-head self-attention layers
 - Mean pooling over valid tokens
 
-**Option 2: Pre-trained T5**
-- Uses HuggingFace `T5EncoderModel`
-- Supports mean/first/last token pooling
+**Option 2: HuggingFace Models (`HuggingFaceTextEncoder`)**
+- Supports any HuggingFace model via `AutoModel`:
+  - **T5** (encoder-only via `T5EncoderModel`)
+  - **BERT** (bert-base-uncased, bert-large, etc.)
+  - **RoBERTa** (roberta-base, roberta-large, etc.)
+  - **DeBERTa**, **ELECTRA**, and more
+- Configurable pooling: mean/first/last token
 - Options for freezing or fine-tuning (LayerNorm-only mode available)
 
 ### Contrastive Learning
@@ -102,18 +121,7 @@ Key dependencies include:
 
 Extract graph embeddings from CIF files using Equiformer:
 
-```bash
-cd data_preparation
 
-python build_graph_text_dataset.py \
-    --csv your_material_data.csv \
-    --cif_dir path/to/cif/files \
-    --out_dir clip_dataset \
-    --equiformer_root path/to/equiformer_v2 \
-    --checkpoint path/to/equiformer_checkpoint.pt \
-    --pooling max \
-    --device cuda
-```
 
 **Input CSV Format:**
 
@@ -131,9 +139,47 @@ python build_graph_text_dataset.py \
 
 ### 2. Training
 
-**Using default configuration:**
+**Basic training:**
 ```bash
-python train.py --cfg expr_setting/run_spec_t5.json
+python train.py --cfg expr_setting/run_spec.json
+```
+
+**Training with advanced features:**
+```json
+// run_spec.json
+{
+  "model": {
+    "text_backend": "huggingface",
+    "text_model_name": "bert-base-uncased",  // or "t5-base", "roberta-base"
+    "text_pooling": "first",
+    "freeze_text_backbone": true,
+    "train_text_layernorm_only": false
+  },
+  "training": {
+    "epochs": 100,
+    "batch_size": 64,
+    "learning_rate": 2e-4,
+
+    // Train/Val split
+    "use_validation": true,
+    "val_split": 0.1,
+
+    // Early stopping
+    "early_stopping": true,
+    "early_stopping_patience": 10,
+    "early_stopping_metric": "val_loss",
+
+    // WandB logging
+    "use_wandb": true,
+    "wandb_project": "graph-text-clip",
+    "wandb_entity": "your-team",
+
+    // Periodic visualization
+    "visualize_during_training": true,
+    "visualize_interval": 10,
+    "visualize_n_samples": 800
+  }
+}
 ```
 
 
@@ -145,31 +191,10 @@ Visualize embeddings with t-SNE:
 python visualize_embeddings.py --cfg expr_setting/visualization_cfg.json
 ```
 
-Outputs saved to `data_preparation/clip_dataset/runs/{run_name}/viz/`:
-- `tsne_*.png` - t-SNE plots of graph and text embeddings
-- `similarity_metrics.json` - Quantitative alignment metrics
-
 ## Configuration
 
 The configuration system uses dataclasses for type safety. Key configuration sections:
 
-### ModelConfig
-```python
-clip_dim: int = 512                    # Shared embedding dimension
-text_backend: Literal["custom", "t5"]  # Text encoder type
-text_width: int = 512                  # Custom encoder width
-text_layers: int = 6                   # Custom encoder depth
-text_heads: int = 8                    # Attention heads
-max_seq_length: int = 256              # Max text length
-vocab_size: int = 256                  # Byte-level vocab
-dropout: float = 0.0
-
-# T5-specific
-t5_model_name: str = "t5-base"
-t5_pooling: Literal["mean", "first", "last"] = "mean"
-freeze_t5: bool = True
-train_layernorm_only: bool = True
-```
 
 ### TrainingConfig
 ```python
@@ -180,18 +205,29 @@ epochs: int = 50
 num_workers: int = 4
 device: str = "cuda"
 log_interval: int = 50
+
+# Train/Val split
+use_validation: bool = True
+val_split: float = 0.1
+val_seed: int = 42
+
+# Early stopping
+early_stopping: bool = False
+early_stopping_patience: int = 5
+early_stopping_metric: Literal["val_loss", "val_acc_g2t", "val_acc_t2g"]
+early_stopping_mode: Literal["min", "max"] = "min"
+
+# WandB
+use_wandb: bool = False
+wandb_project: Optional[str] = None
+wandb_entity: Optional[str] = None
+
+# Visualization
+visualize_during_training: bool = False
+visualize_interval: int = 10
+visualize_n_samples: int = 800
 ```
 
-### Experiment Naming
-
-Runs are automatically named based on configuration:
-```
-{text_model_id}_{graph_backbone_id}_{suffix}
-```
-
-Examples:
-- `t5-base_equiformer_001`
-- `customTx_equiformer_002`
 
 ## Model Training Details
 
@@ -212,36 +248,18 @@ Models saved to `data_preparation/clip_dataset/runs/{run_name}/checkpoints/graph
 
 ## Advanced Usage
 
-### Custom Text Encoder
+### Switching Text Encoders
 
-To use a custom transformer instead of T5:
-
-```python
-config.model.text_backend = "custom"
-config.model.text_width = 512
-config.model.text_layers = 6
-config.model.text_heads = 8
-```
-
-### Adjusting Graph Embeddings
-
-Modify pooling strategy in data preparation:
-```bash
-python build_graph_text_dataset.py ... --pooling mean  # or 'max'
-```
-
-### Fine-tuning T5
-
-To fine-tune only LayerNorms:
-```python
-config.model.freeze_t5 = False
-config.model.train_layernorm_only = True
-```
-
-To fully fine-tune T5:
-```python
-config.model.freeze_t5 = False
-config.model.train_layernorm_only = False
+**Use BERT instead of T5:**
+```json
+{
+  "model": {
+    "text_backend": "huggingface",
+    "text_model_name": "bert-base-uncased",
+    "text_pooling": "first",
+    "freeze_text_backbone": true
+  }
+}
 ```
 
 
@@ -263,21 +281,7 @@ This codebase builds upon or relates to:
 - Reduce `batch_size` in training config
 - Use gradient accumulation
 - Reduce `clip_dim` or `text_width`
-
-**2. Missing CIF files**
-- Check filename format: `{formula}_{id}.cif`
-- Ensure formula sanitization matches your files
-- Review `missing_cif.txt` log
-
-**3. Graph embedding dimension mismatch**
-- Verify Equiformer checkpoint matches architecture
-- Check `graph_dim` in model initialization
-- Ensure consistent pooling strategy
-
-**4. T5 memory issues**
-- Use smaller variant: `t5-small` instead of `t5-base`
-- Freeze T5 layers: `freeze_t5=True`
-- Reduce `max_seq_length`
+- Use smaller text model (e.g., `bert-base-uncased` → `distilbert-base-uncased`)
 
 ## License
 

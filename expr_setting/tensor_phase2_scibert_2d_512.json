@@ -1,0 +1,46 @@
+{
+  "model": {
+    "text_backend": "huggingface",
+    "text_model_name": "allenai/scibert_scivocab_uncased",
+    "text_pooling": "first",
+    "max_seq_len": 512,
+    "clip_dim": 512,
+    "freeze_text_backbone": true,
+    "train_text_layernorm_only": true
+  },
+  "training": {
+    "epochs": 1000000,
+    "batch_size": 64,
+    "learning_rate": 1e-4,
+    "weight_decay": 0.01,
+    "use_validation": true,
+    "val_split": 0.1,
+    "val_seed": 42,
+    "use_wandb": true,
+    "wandb_project": "material-tensor-regression",
+    "log_interval": 50,
+    "early_stopping": true,
+    "early_stopping_patience": 5,
+    "early_stopping_metric": "val_loss",
+    "early_stopping_mode": "min"
+  },
+  "tensor_regression": {
+    "task": "regression",
+    "modality": "text",
+    "tensor_dim": 9,
+    "tensor_mode": "2d",
+    "normalize_tensor": true,
+    "clip_checkpoint_path": "data_preparation/news/runs/t5-base_equiformer_001_scibert/checkpoints/best_model.pt",
+    "log_parity_plot": true,
+    "parity_plot_interval": 10,
+    "head_type": "mlp",
+    "head_hidden_dims": [256, 128],
+    "head_dropout": 0.1,
+    "training_phase": "phase2",
+    "freeze_clip": false,
+    "clip_loss_weight": 0.1,
+    "regression_loss_weight": 1.0,
+    "loss_fn": "mae",
+    "regression_lr": 1e-4
+  }
+}

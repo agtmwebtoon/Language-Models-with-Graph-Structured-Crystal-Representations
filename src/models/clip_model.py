@@ -29,6 +29,7 @@ class GraphTextCLIP(nn.Module):
         text_pooling: Literal["mean", "first", "last"] = "mean",
         freeze_text_backbone: bool = False,
         train_text_layernorm_only: bool = False,
+        train_top_n_layers: int = None,
         text_dropout: float = 0.0,
     ):
         super().__init__()
@@ -51,7 +52,8 @@ class GraphTextCLIP(nn.Module):
                 pooling=text_pooling,
                 freeze_backbone=freeze_text_backbone,
                 train_layernorm_only=train_text_layernorm_only,
-                dropout=text_dropout,
+                train_top_n_layers=train_top_n_layers,
+                dropout=text_dropout
             )
         else:
             raise ValueError(f"Unsupported text backend: {text_backend}.")

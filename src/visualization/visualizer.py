@@ -159,22 +159,27 @@ class GraphTextCLIPVisualizer:
         out_dir = self.config.visualization.output_dir
         os.makedirs(out_dir, exist_ok=True)
 
+        # Get text backend from config
+        text_backend = self.config.model.text_backend
+        text_model_id = self.config.model.text_model_id
+
         # 1) t-SNE
-        tsne_path = os.path.join(out_dir, f"tsne_pairs_N{batch.G.shape[0]}_{self.text_backend}.png")
+        tsne_path = os.path.join(out_dir, f"tsne_pairs_N{batch.G.shape[0]}_{text_model_id}.png")
         plot_tsne_pairs(batch.G, batch.T, tsne_path, self.run_cfg.tsne)
 
         # 2) similarity heatmap
         B = min(self.run_cfg.sim_batch, batch.G.shape[0])
-        sim_path = os.path.join(out_dir, f"similarity_heatmap_B{B}_{self.text_backend}.png")
+        sim_path = os.path.join(out_dir, f"similarity_heatmap_B{B}_{text_model_id}.png")
         sim_stats = plot_similarity_heatmap(batch.G[:B], batch.T[:B], sim_path)
 
         # 3) diag hist
-        hist_path = os.path.join(out_dir, f"diag_similarity_hist_N{batch.G.shape[0]}_{self.text_backend}.png")
+        hist_path = os.path.join(out_dir, f"diag_similarity_hist_N{batch.G.shape[0]}_{text_model_id}.png")
         plot_diag_hist(batch.G, batch.T, hist_path)
 
         return {
             "checkpoint": str(ckpt_path),
-            "backend": self.text_backend,
+            "backend": text_backend,
+            "text_model": text_model_id,
             "n_samples": int(batch.G.shape[0]),
             "tsne_path": tsne_path,
             "sim_path": sim_path,

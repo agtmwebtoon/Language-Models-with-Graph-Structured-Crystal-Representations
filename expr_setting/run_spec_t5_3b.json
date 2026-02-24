@@ -1,0 +1,33 @@
+{
+  "model": {
+    "text_backend": "huggingface",
+    "text_model_name": "google-t5/t5-3b",
+    "text_pooling": "mean",
+    "freeze_text_backbone": true,
+    "train_text_layernorm_only": true
+  },
+  "training": {
+    "epochs": 500,
+    "batch_size": 32,
+    "learning_rate": 0.00001,
+    "weight_decay": 0.01,
+    "num_workers": 4,
+    "device": "cuda",
+    "log_interval": 50,
+
+    "use_validation": true,
+    "val_split": 0.1,
+    "val_seed": 42,
+
+    "early_stopping": true,
+    "early_stopping_patience": 10,
+    "early_stopping_metric": "val_loss",
+
+    "visualize_during_training": true,
+    "visualize_interval": 5,
+    "visualize_n_samples": 800,
+
+    "use_wandb": true,
+    "wandb_project": "graph-text-clip"
+  }
+}

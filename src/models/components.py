@@ -35,14 +35,17 @@ class AttentionHead(nn.Module):
         self.scale = head_size ** -0.5
 
     def forward(self, x: torch.Tensor, attn_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
-        Q = self.query(x)
-        K = self.key(x)
-        V = self.value(x)
-        scores = (Q @ K.transpose(-2, -1)) * self.scale
+        Q = self.query(x)  # [B, L, head_size]
+        K = self.key(x)    # [B, L, head_size]
+        V = self.value(x)  # [B, L, head_size]
+        scores = (Q @ K.transpose(-2, -1)) * self.scale  # [B, L, L]
 
         if attn_mask is not None:
-            mask = attn_mask.unsqueeze(1)  # [B, 1, L]
-            scores = scores.masked_fill(mask == 0, float("-inf"))
+            # attn_mask: [B, L] where 1=valid, 0=padding
+            # scores: [B, L, L] - attention from query_i to key_j
+            # Expand mask to [B, 1, L] to mask out padding positions in keys
+            key_mask = attn_mask.unsqueeze(1)  # [B, 1, L]
+            scores = scores.masked_fill(key_mask == 0, float("-inf"))
 
         A = torch.softmax(scores, dim=-1)
         return A @ V

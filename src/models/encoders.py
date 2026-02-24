@@ -115,14 +115,27 @@ class HuggingFaceTextEncoder(BaseTextEncoder):
         dropout: float = 0.0,
         freeze_backbone: bool = False,
         train_layernorm_only: bool = False,
+        train_top_n_layers: int = None,
     ):
+        """
+        Args:
+            model_name: HuggingFace model name
+            embed_dim: Output embedding dimension
+            pooling: Pooling strategy for sequence -> vector
+            dropout: Dropout probability
+            freeze_backbone: Freeze entire backbone
+            train_layernorm_only: Only train LayerNorm layers (domain adaptation)
+            train_top_n_layers: Only train top N layers (e.g., 2 for last 2 layers)
+                               If set, overrides freeze_backbone and train_layernorm_only
+        """
         super().__init__()
 
         # Use T5EncoderModel for T5 models, AutoModel for others
         if "t5" in model_name.lower():
-            self.backbone = T5EncoderModel.from_pretrained(model_name, local_files_only=True)
+            self.backbone = T5EncoderModel.from_pretrained(model_name, local_files_only=False)
+
         else:
-            self.backbone = AutoModel.from_pretrained(model_name, local_files_only=True)
+            self.backbone = AutoModel.from_pretrained(model_name, local_files_only=False)
 
         self.hidden_dim = self.backbone.config.hidden_size if hasattr(self.backbone.config, 'hidden_size') else self.backbone.config.d_model
         self.pooling = pooling
@@ -130,9 +143,20 @@ class HuggingFaceTextEncoder(BaseTextEncoder):
         self.dropout = nn.Dropout(dropout) if dropout > 0 else nn.Identity()
         self.proj = nn.Linear(self.hidden_dim, embed_dim)
 
-        if freeze_backbone:
+        # Freezing strategy (priority: train_top_n_layers > train_layernorm_only > freeze_backbone)
+        if train_top_n_layers is not None:
+            # Freeze all parameters first
             for p in self.backbone.parameters():
                 p.requires_grad = False
+
+            # Unfreeze top N layers
+            self._unfreeze_top_n_layers(train_top_n_layers)
+            print(f"Training top {train_top_n_layers} layers only")
+
+        elif freeze_backbone:
+            for p in self.backbone.parameters():
+                p.requires_grad = False
+
         elif train_layernorm_only:
             for p in self.backbone.parameters():
                 p.requires_grad = False
@@ -140,6 +164,45 @@ class HuggingFaceTextEncoder(BaseTextEncoder):
                 if isinstance(m, nn.LayerNorm):
                     for p in m.parameters():
                         p.requires_grad = True
+
+    def _unfreeze_top_n_layers(self, n_layers: int):
+        """
+        Unfreeze the top N layers of the backbone.
+        Works for BERT, RoBERTa, T5, etc.
+        """
+        # Get encoder layers
+        if hasattr(self.backbone, 'encoder'):
+            # For BERT, RoBERTa: model.encoder.layer
+            if hasattr(self.backbone.encoder, 'layer'):
+                layers = self.backbone.encoder.layer
+            # For T5: model.encoder.block
+            elif hasattr(self.backbone.encoder, 'block'):
+                layers = self.backbone.encoder.block
+            else:
+                print("Warning: Could not find encoder layers, unfreezing all parameters")
+                for p in self.backbone.parameters():
+                    p.requires_grad = True
+                return
+        else:
+            print("Warning: Could not find encoder, unfreezing all parameters")
+            for p in self.backbone.parameters():
+                p.requires_grad = True
+            return
+
+        total_layers = len(layers)
+        start_layer = max(0, total_layers - n_layers)
+
+        print(f"  Total layers: {total_layers}, unfreezing layers {start_layer} to {total_layers-1}")
+
+        # Unfreeze top N layers
+        for i in range(start_layer, total_layers):
+            for p in layers[i].parameters():
+                p.requires_grad = True
+
+        # Also unfreeze pooler if it exists (for BERT)
+        if hasattr(self.backbone, 'pooler') and self.backbone.pooler is not None:
+            for p in self.backbone.pooler.parameters():
+                p.requires_grad = True
 
     def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
         """

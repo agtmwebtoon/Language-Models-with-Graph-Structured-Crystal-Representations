@@ -49,6 +49,7 @@ class ModelConfig:
     text_dropout: float = 0.0
     freeze_text_backbone: bool = True
     train_text_layernorm_only: bool = True
+    train_top_n_layers: Optional[int] = None  # Train only top N layers (overrides other freeze settings)
 
     # For custom transformer backend
     text_width: int = 512
@@ -147,16 +148,84 @@ class TokenizerConfig:
 @dataclass
 class VisualizationConfig:
     """Visualization settings."""
+    # Sampling
     n_samples_tsne: int = 800
     n_samples_metrics: int = 4000
+
+    # t-SNE parameters
     tsne_perplexity: int = 30
     tsne_seed: int = 42
+    tsne_connect_k: int = 200  # Number of graph-text pairs to connect with lines
+
+    # Plot parameters
     similarity_batch_size: int = 64
+    dpi: int = 300
+
+    # Output
     output_dir: Path = None
 
     def __post_init__(self):
         if self.output_dir:
             self.output_dir = Path(self.output_dir)
+
+
+@dataclass
+class TensorRegressionConfig:
+    """Tensor regression training configuration."""
+    # Task type
+    task: Literal["regression", "elastic_2d_symmetry"] = "regression"
+    modality: Literal["graph", "text"] = "graph"  # Which encoder to use
+
+    # Tensor properties
+    tensor_dim: int = 9  # Output dimension (3x3 tensor flattened)
+    tensor_mode: Optional[str] = None  # "2d", "voigt2d", "full"
+    normalize_tensor: bool = True  # Normalize tensor values (recommended)
+
+    # CLIP checkpoint
+    clip_checkpoint_path: Optional[str] = None  # Path to pre-trained CLIP checkpoint
+
+    # Validation logging
+    log_parity_plot: bool = True  # Generate parity plot during validation
+    parity_plot_interval: int = 10  # Generate parity plot every N epochs
+
+    # Regression head architecture
+    head_type: Literal["linear", "mlp", "dual"] = "mlp"
+    head_hidden_dims: Optional[list] = None  # e.g., [256, 128] for MLP
+    head_dropout: float = 0.1
+
+    # Training phases
+    training_phase: Literal["phase1", "phase2"] = "phase1"
+    # Phase 1: freeze CLIP encoder, train regression head only
+    # Phase 2: fine-tune encoder + head with joint loss
+
+    # Phase 1: CLIP encoder settings
+    freeze_clip: bool = True
+
+    # Phase 2: Joint training settings
+    clip_loss_weight: float = 0.1  # Weight for CLIP loss in Phase 2
+    regression_loss_weight: float = 1.0  # Weight for regression loss
+
+    # Loss function
+    loss_fn: Literal["mse", "mae", "huber"] = "mse"
+
+    # Learning rate (can override TrainingConfig)
+    regression_lr: Optional[float] = None  # If None, use TrainingConfig.learning_rate
+
+    # Symmetry-aware settings (for elastic_2d_symmetry task)
+    beta_prior: float = 1.0  # Prior strength for Robo crystal system hints
+    lambda_sym: float = 0.1  # Weight for symmetry regularization
+    lambda_sym_schedule: Optional[Dict[str, Any]] = None  # Schedule for lambda_sym
+    freeze_alpha_head: bool = False  # Freeze symmetry head in phase 1
+    phase1_epochs: int = 30  # Number of epochs for phase 1
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """Dict-like get method for backward compatibility."""
+        return getattr(self, key, default)
+
+    def __post_init__(self):
+        # Set default hidden dims based on head_type
+        if self.head_hidden_dims is None and self.head_type == "mlp":
+            self.head_hidden_dims = [256, 128]
 
 
 class Config:
@@ -175,6 +244,7 @@ class Config:
         self.model = ModelConfig()
         self.training = TrainingConfig()
         self.tokenizer = TokenizerConfig()
+        self.tensor_regression = TensorRegressionConfig()
 
         if run_name is None:
             run_name = build_run_name(self)
@@ -229,6 +299,12 @@ class Config:
             for k, v in payload["visualization"].items():
                 if hasattr(self.visualization, k):
                     setattr(self.visualization, k, v)
+
+        # Update tensor_regression config
+        if "tensor_regression" in payload and payload["tensor_regression"] is not None:
+            for k, v in payload["tensor_regression"].items():
+                if hasattr(self.tensor_regression, k):
+                    setattr(self.tensor_regression, k, v)
 
         # Update data_dir
         if "data_dir" in payload and payload["data_dir"] is not None:
@@ -298,7 +374,7 @@ class Config:
         runs_dir.mkdir(parents=True, exist_ok=True)
 
         # 1) build base run name (short)
-        base_name = build_run_name(self)  # e.g. t5-base_equiformer
+        base_name = build_run_name(self)  # e.g. t5_small_clip_base_model
 
         # 2) resolve collision with numeric suffix
         run_dir = resolve_run_dir_with_suffix(runs_dir, base_name)

@@ -71,7 +71,7 @@ class HFTokenizerWrapper:
         max_len: int = 256,
         padding: str = "max_length",  # or "longest"
     ):
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name, local_files_only=True)
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.max_len = max_len
         self.padding = padding
         self.model_name = model_name

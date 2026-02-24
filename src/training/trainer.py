@@ -192,8 +192,13 @@ class Trainer:
             epoch_viz_dir = self.config.paths.viz_dir / f"epoch_{epoch:03d}"
             epoch_viz_dir.mkdir(parents=True, exist_ok=True)
 
-            # Generate plots
-            tsne_cfg = TSNEConfig(perplexity=30, seed=42, connect_k=200)
+            # Generate plots using config
+            viz_cfg = self.config.visualization
+            tsne_cfg = TSNEConfig(
+                perplexity=viz_cfg.tsne_perplexity,
+                seed=viz_cfg.tsne_seed,
+                connect_k=viz_cfg.tsne_connect_k
+            )
             plot_tsne_pairs(
                 emb_batch.G, emb_batch.T,
                 out_path=str(epoch_viz_dir / "tsne_pairs.png"),
